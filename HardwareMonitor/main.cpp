@@ -1,4 +1,5 @@
 #define ID_TIMER1 666
+#define ID_TRAY_ICON 667
 
 #include <Windows.h>
 #include <string>
@@ -94,31 +95,47 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	return TRUE;
 }
 
-HICON CreateSmallIcon(HWND hWnd, HDC hdc, std::string text)
+HICON CreateSmallIcon(HWND hWnd, HDC hdc, float temperature)
 {
 	HDC hdcMem;
 	HBITMAP hBitmap = NULL;
 	HBITMAP hOldBitMap = NULL;
 	HBITMAP hBitmapMask = NULL;
 	ICONINFO iconInfo;
-	HFONT hFont;
 	HICON hIcon;
+	RECT iconRt = { 0, 0, 128, 128 };
+	HBRUSH hBrush;
+	SolidBrush  solidBrush(Color(255, 255, 255));
 
 	hdcMem = CreateCompatibleDC(hdc);
 	hBitmap = CreateCompatibleBitmap(hdc, 128, 128);
 	hBitmapMask = CreateCompatibleBitmap(hdc, 128, 128);
-	ReleaseDC(hWnd, hdc);
 	hOldBitMap = (HBITMAP)SelectObject(hdcMem, hBitmap);
-	PatBlt(hdcMem, 0, 0, 128, 128, WHITENESS);
 
+	hBrush = CreateSolidBrush(RGB(255, 0, 0));
+	FillRect(hdcMem, &iconRt, hBrush);
+	
 	Graphics graphics(hdcMem);
 	FontFamily  fontFamily(L"Bahnschrift SemiBold SemiConden");
 	Font        font(&fontFamily, 120, FontStyleBold, UnitPixel);
-	SolidBrush  solidBrush(Color(0, 0, 0));
-	Pen pen(Color(255, 0, 0, 0));
+	
+	if (temperature <= 40) {
+		solidBrush.SetColor(Color(0, 255, 0));
+	}
+	else if (temperature > 40 && temperature <= 60) {
+		solidBrush.SetColor(Color(255, 255, 0));
+	}
+	else if (temperature > 60 && temperature <= 75) {
+		solidBrush.SetColor(Color(255, 165, 0));
+	}
+	else if (temperature > 75) {
+		solidBrush.SetColor(Color(255, 0, 0));
+	}
+	
 	PointF pointF = { -16, 10 };
-	std::wstring wtext = std::wstring(text.begin(), text.end());
-	graphics.DrawString(wtext.c_str(), text.size(), &font, pointF, &solidBrush);
+	int tmp = temperature;
+	std::wstring wtext = std::to_wstring(tmp);
+	graphics.DrawString(wtext.c_str(), wtext.size(), &font, pointF, &solidBrush);
 
 	SelectObject(hdc, hOldBitMap);
 	hOldBitMap = NULL;
@@ -133,6 +150,7 @@ HICON CreateSmallIcon(HWND hWnd, HDC hdc, std::string text)
 	DeleteDC(hdc);
 	DeleteObject(hBitmap);
 	DeleteObject(hBitmapMask);
+	DeleteObject(hBrush);
 
 	return hIcon;
 }
@@ -183,11 +201,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_CREATE: {
 		SetTimer(hWnd, ID_TIMER1, 1000, NULL);
 		TrayIconData.hWnd = hWnd;
-		TrayIconData.uFlags = NIF_ICON | NIF_REALTIME | NIF_MESSAGE;
+		TrayIconData.uID = ID_TRAY_ICON;
+		TrayIconData.uFlags = NIF_ICON;// | NIF_REALTIME;// | NIF_MESSAGE;
 		TrayIconData.uCallbackMessage = WM_APP;
-		TrayIconData.hIcon = CreateSmallIcon(hWnd, GetDC(hWnd), "66");
+		TrayIconData.hIcon = CreateSmallIcon(hWnd, GetDC(hWnd), 66);
 		Shell_NotifyIcon(NIM_ADD, &TrayIconData);
-		//ShowWindow(hWnd, SW_MINIMIZE);
 	}	
 		break;
 
@@ -198,8 +216,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			mg.buffLoad = gcnew System::Collections::Generic::Dictionary<System::String ^, float>();
 			mg.buffTemperature = ManagedGlobals::temperature->GetTemperaturesInCelsius();
 			mg.buffLoad = ManagedGlobals::temperature->GetLoadInPercents();
-			TrayIconData.hIcon = CreateSmallIcon(hWnd, GetDC(hWnd), 
-				msclr::interop::marshal_as<std::string>(mg.buffTemperature["CPU Package"].ToString())); //CPU Total
+			TrayIconData.hIcon = CreateSmallIcon(hWnd, GetDC(hWnd), mg.buffTemperature["CPU Package"]); //CPU Total
 			Shell_NotifyIcon(NIM_MODIFY, &TrayIconData);
 		}
 		break;
@@ -211,7 +228,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PAINTSTRUCT ps;
 		GetClientRect(hWnd, &rt);
 		hdc = BeginPaint(hWnd, &ps);
-		//HICON myHicon = CreateSmallIcon(hWnd, hdc);
+		//HICON myHicon = CreateSmallIcon(hWnd, hdc, 55);
 		//TrayIconData.hIcon = myHicon;
 		//Shell_NotifyIcon(NIM_MODIFY, &TrayIconData);
 		//SaveIcon(myHicon, "E:\\MY_ICO.ico");
@@ -220,6 +237,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	break;
 
 	case WM_DESTROY:
+		Shell_NotifyIcon(NIM_DELETE, &TrayIconData);
 		KillTimer(hWnd, ID_TIMER1);
 		PostQuitMessage(0);
 		break;
